@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "porypal-fe8"
+version = "0.1.0"
+description = "FE8 palette tool: PNG -> 16-colour JASC .pal extraction & apply (fireemblem8u; inspired by Loxed's Porypal)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "laqieer" }]
+keywords = ["gba", "fireemblem", "palette", "jasc", "decomp", "fe8"]
+dependencies = [
+    "pillow>=9.0",
+    "numpy>=1.21",
+]
+
+[project.urls]
+Homepage = "https://github.com/laqieer/porypal-fe8"
+
+[project.scripts]
+porypal-fe8 = "palette_tool:main"
+
+[tool.setuptools]
+py-modules = ["palette_tool"]
