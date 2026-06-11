@@ -45,6 +45,24 @@ Without installing, you can run the module directly:
 python3 palette_tool.py extract IN.png -o OUT.pal
 ```
 
+## Install / Releases
+
+Once published to PyPI:
+
+```sh
+pip install porypal-fe8
+```
+
+Each `v*` tag also produces a **GitHub Release** with the built wheel and sdist
+attached (under [Releases](https://github.com/laqieer/porypal-fe8/releases)),
+so you can `pip install` a downloaded artifact even without PyPI.
+
+> **Note:** PyPI publishing uses [OIDC trusted
+> publishing](https://docs.pypi.org/trusted-publishers/) (no API token). It
+> requires a **trusted publisher** to be configured on PyPI for project
+> `porypal-fe8`, owner `laqieer`, workflow `release.yml`, environment `pypi`.
+> The GitHub Release job is independent and succeeds even before that is set up.
+
 ## Usage
 
 ### Extract a palette
