@@ -27,7 +27,7 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Install package
-        run: pip install .
+        run: pip install .[dev]
 
       - name: Smoke test (--help)
         run: porypal-fe8 --help
@@ -40,6 +40,9 @@ jobs:
           python tests/gen_test_png.py tmp.png
           porypal-fe8 extract tmp.png -o tmp.pal -n 16
           python tests/check_pal.py tmp.pal
+
+      - name: Run pytest suite
+        run: pytest -v
 
       - name: Build package (wheel + sdist)
         run: |
