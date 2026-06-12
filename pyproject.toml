@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "porypal-fe8"
 version = "0.1.2"
-description = "FE8 palette tool: PNG -> 16-colour JASC .pal extraction & apply (fireemblem8u; inspired by Loxed's Porypal)"
+description = "FE8 palette tool: 16-colour JASC .pal extraction, apply, and validation (fireemblem8u; inspired by Loxed's Porypal)"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }

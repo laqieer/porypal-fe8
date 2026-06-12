@@ -137,6 +137,54 @@ def test_read_pal_too_short(tmp_path):
         pt.read_pal(path)
 
 
+def test_validate_pal_happy_crlf(tmp_path):
+    colours = [(0, 0, 0), (255, 255, 255), (12, 34, 56)]
+    p = tmp_path / "valid.pal"
+    pt.write_pal(str(p), colours)
+    assert pt.validate_pal(str(p)) == colours
+
+
+def test_validate_pal_rejects_lf_by_default(tmp_path):
+    p = tmp_path / "lf.pal"
+    p.write_bytes(b"JASC-PAL\n0100\n1\n0 0 0\n")
+    with pytest.raises(ValueError, match="LF-only"):
+        pt.validate_pal(str(p))
+
+
+def test_validate_pal_allows_lf_when_requested(tmp_path):
+    p = tmp_path / "lf-ok.pal"
+    p.write_bytes(b"JASC-PAL\n0100\n1\n0 0 0\n")
+    assert pt.validate_pal(str(p), require_crlf=False) == [(0, 0, 0)]
+
+
+def test_validate_pal_rejects_count_mismatch_extra_entry(tmp_path):
+    p = tmp_path / "extra.pal"
+    p.write_bytes(b"JASC-PAL\r\n0100\r\n1\r\n0 0 0\r\n1 1 1\r\n")
+    with pytest.raises(ValueError, match="header declares 1"):
+        pt.validate_pal(str(p))
+
+
+def test_validate_pal_rejects_count_mismatch_missing_entry(tmp_path):
+    p = tmp_path / "missing.pal"
+    p.write_bytes(b"JASC-PAL\r\n0100\r\n2\r\n0 0 0\r\n")
+    with pytest.raises(ValueError, match="declares 2"):
+        pt.validate_pal(str(p))
+
+
+def test_validate_pal_rejects_more_than_16_by_default(tmp_path):
+    p = tmp_path / "too-many.pal"
+    pt.write_pal(str(p), [(i, i, i) for i in range(17)])
+    with pytest.raises(ValueError, match="exceeds"):
+        pt.validate_pal(str(p))
+
+
+def test_validate_pal_allows_more_than_16_when_requested(tmp_path):
+    colours = [(i, i, i) for i in range(17)]
+    p = tmp_path / "many-ok.pal"
+    pt.write_pal(str(p), colours)
+    assert pt.validate_pal(str(p), allow_more_than_16=True) == colours
+
+
 # ---------------------------------------------------------------------------
 # Colour space
 # ---------------------------------------------------------------------------
@@ -261,6 +309,17 @@ def test_parser_apply():
     assert args.output == "out.png"
 
 
+def test_parser_validate():
+    parser = pt.build_parser()
+    args = parser.parse_args([
+        "validate", "--allow-lf", "--allow-more-than-16", "a.pal", "b.pal"
+    ])
+    assert args.command == "validate"
+    assert args.palettes == ["a.pal", "b.pal"]
+    assert args.allow_lf is True
+    assert args.allow_more_than_16 is True
+
+
 def test_parser_extract_default_n():
     parser = pt.build_parser()
     args = parser.parse_args(["extract", "in.png", "-o", "out.pal"])
@@ -314,6 +373,20 @@ def test_main_apply_missing_palette(tmp_path):
     rc = pt.main(["apply", str(png), str(tmp_path / "nope.pal"),
                   "-o", str(tmp_path / "o.png")])
     assert rc == 1
+
+
+def test_main_validate_happy(tmp_path):
+    pal = tmp_path / "ok.pal"
+    pt.write_pal(str(pal), [(0, 0, 0), (255, 255, 255)])
+    assert pt.main(["validate", str(pal)]) == 0
+
+
+def test_main_validate_multi_file_reports_failure(tmp_path):
+    good = tmp_path / "good.pal"
+    bad = tmp_path / "bad.pal"
+    pt.write_pal(str(good), [(0, 0, 0)])
+    bad.write_bytes(b"JASC-PAL\n0100\n1\n0 0 0\n")
+    assert pt.main(["validate", str(good), str(bad)]) == 1
 
 
 # ---------------------------------------------------------------------------

@@ -2,12 +2,14 @@
 
 A small, FE8-oriented palette CLI for the
 [`fireemblem8u`](https://github.com/FireEmblemUniverse/fireemblem8u) decomp
-graphics pipeline. It does two things:
+graphics pipeline. It does three things:
 
 - **`extract`** — quantize a PNG down to **≤16 colours** and write a GBA-style
   **JASC `.pal`** palette.
 - **`apply`** — remap every pixel of a PNG to its nearest colour in a given
   `.pal` and save an **indexed PNG**, ready for `gbagfx`.
+- **`validate`** — check JASC `.pal` files for decomp/`gbagfx` compatibility
+  before they enter the build.
 
 It is a focused, clean reimplementation of the *reusable core* of
 [Loxed's Porypal](https://github.com/Loxed/porypal) — k-means colour
@@ -93,6 +95,21 @@ Remaps every pixel of `IN.png` to the nearest colour in `PALETTE.pal` (nearest
 in Oklab) and saves an indexed (`P`-mode) PNG whose colours are exactly the
 palette.
 
+### Validate palettes
+
+```sh
+porypal-fe8 validate path/to/*.pal
+```
+
+Checks that each JASC `.pal` has the `JASC-PAL` / `0100` header, that the
+declared colour count exactly matches the RGB entries, that each RGB component
+is in `0..255`, that the palette has at most 16 colours, and that line endings
+are **CRLF**. CRLF is required by the FE8 decomp/`gbagfx` palette pipeline; use
+`--allow-lf` only when auditing external palettes before rewriting them.
+
+Use `--allow-more-than-16` for non-4bpp/non-GBA checks where larger JASC
+palettes are intentional.
+
 ## How it fits the FE8 pipeline
 
 The decomp stores graphics as PNGs and JASC `.pal` palettes, and its Makefile
@@ -121,6 +138,12 @@ rejects LF-only palettes. See the
 [`fireemblem8u`](https://github.com/FireEmblemUniverse/fireemblem8u) repo and
 [`gbagfx`](https://github.com/pret/pokeemerald/tree/master/tools/gbagfx) for the
 full graphics flow.
+
+A practical decomp-side check before `make` is:
+
+```sh
+find graphics -name '*.pal' -exec porypal-fe8 validate {} +
+```
 
 ## How it works
 

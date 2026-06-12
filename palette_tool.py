@@ -2,13 +2,14 @@
 """porypal-fe8: an FE8-oriented palette tool.
 
 A focused command-line tool for the ``fireemblem8u`` decomp graphics pipeline.
-It does two things:
+It does three things:
 
 * ``extract`` -- quantize a PNG down to <=16 representative colours and write a
   GBA-style JASC ``.pal`` palette (the format the decomp's hundreds of ``.pal``
   files use, which ``tools/gbagfx`` converts to ``.gbapal``).
 * ``apply`` -- remap every pixel of a PNG to its nearest colour in a given
   ``.pal`` and save an indexed PNG (ready for ``gbagfx`` to turn into ``.4bpp``).
+* ``validate`` -- check JASC ``.pal`` files for decomp/``gbagfx`` compatibility.
 
 The colour-quantization idea (k-means over pixels in a perceptual colour space)
 and the JASC ``.pal`` round-trip are inspired by Loxed's Porypal
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 from typing import List, Sequence, Tuple
 
 import numpy as np
@@ -51,8 +53,12 @@ def read_pal(path: str) -> List[RGB]:
     with open(path, "r", encoding="utf-8") as fh:
         lines = [line.strip() for line in fh.read().splitlines()]
 
+    return _parse_jasc_lines(path, lines, exact_count=False)
+
+
+def _parse_jasc_lines(path: str, lines: List[str], *, exact_count: bool) -> List[RGB]:
     # Drop trailing blank lines (decomp pals often end with one).
-    while lines and lines[-1] == "":
+    while lines and lines[-1].strip() == "":
         lines.pop()
 
     if len(lines) < 3:
@@ -66,12 +72,19 @@ def read_pal(path: str) -> List[RGB]:
         count = int(lines[2])
     except ValueError as exc:
         raise ValueError(f"{path}: invalid colour count '{lines[2]}'") from exc
+    if count < 0:
+        raise ValueError(f"{path}: invalid negative colour count {count}")
 
     colour_lines = lines[3:]
     if len(colour_lines) < count:
         raise ValueError(
             f"{path}: header declares {count} colours but only "
             f"{len(colour_lines)} colour lines are present"
+        )
+    if exact_count and len(colour_lines) != count:
+        raise ValueError(
+            f"{path}: header declares {count} colours but "
+            f"{len(colour_lines)} colour entries are present"
         )
 
     colours: List[RGB] = []
@@ -94,6 +107,45 @@ def read_pal(path: str) -> List[RGB]:
                 )
         colours.append((r, g, b))
 
+    return colours
+
+
+def _require_crlf_line_endings(path: str, raw: bytes) -> None:
+    """Reject bare LF or CR line endings; gbagfx expects CRLF JASC palettes."""
+    for i, byte in enumerate(raw):
+        if byte == 0x0A and (i == 0 or raw[i - 1] != 0x0D):
+            raise ValueError(
+                f"{path}: LF-only line ending found; use CRLF line endings for "
+                "gbagfx/decomp palettes"
+            )
+        if byte == 0x0D and (i + 1 == len(raw) or raw[i + 1] != 0x0A):
+            raise ValueError(
+                f"{path}: bare CR line ending found; use CRLF line endings for "
+                "gbagfx/decomp palettes"
+            )
+
+
+def validate_pal(
+    path: str,
+    *,
+    allow_more_than_16: bool = False,
+    require_crlf: bool = True,
+) -> List[RGB]:
+    """Validate a JASC ``.pal`` for FE8 decomp/gbagfx use and return colours."""
+    raw = Path(path).read_bytes()
+    if require_crlf:
+        _require_crlf_line_endings(path, raw)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{path}: not valid UTF-8/ASCII text") from exc
+
+    colours = _parse_jasc_lines(path, text.splitlines(), exact_count=True)
+    if len(colours) > GBA_MAX_COLORS and not allow_more_than_16:
+        raise ValueError(
+            f"{path}: {len(colours)} colours exceeds the GBA 4bpp limit of "
+            f"{GBA_MAX_COLORS} (pass --allow-more-than-16 to permit)"
+        )
     return colours
 
 
@@ -309,6 +361,31 @@ def cmd_apply(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_validate(args: argparse.Namespace) -> int:
+    ok = True
+    require_crlf = not args.allow_lf
+    for path in args.palettes:
+        try:
+            colours = validate_pal(
+                path,
+                allow_more_than_16=args.allow_more_than_16,
+                require_crlf=require_crlf,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            ok = False
+            continue
+
+        checks = [f"{len(colours)} colours"]
+        if not args.allow_more_than_16:
+            checks.append(f"<={GBA_MAX_COLORS}")
+        if require_crlf:
+            checks.append("CRLF")
+        print(f"{path}: valid JASC palette ({', '.join(checks)})")
+
+    return 0 if ok else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="porypal-fe8",
@@ -338,6 +415,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_apply.add_argument("palette", help="JASC .pal path")
     p_apply.add_argument("-o", "--output", required=True, help="output PNG path")
     p_apply.set_defaults(func=cmd_apply)
+
+    p_validate = sub.add_parser(
+        "validate",
+        help="validate JASC .pal files for FE8 decomp/gbagfx use",
+    )
+    p_validate.add_argument("palettes", nargs="+", help="JASC .pal path(s)")
+    p_validate.add_argument(
+        "--allow-more-than-16",
+        action="store_true",
+        help="permit palettes with more than 16 colours",
+    )
+    p_validate.add_argument(
+        "--allow-lf",
+        action="store_true",
+        help="do not require CRLF line endings",
+    )
+    p_validate.set_defaults(func=cmd_validate)
 
     return parser
 
